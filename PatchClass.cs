@@ -15,7 +15,7 @@ public class PatchClass(BasicMod mod, string settingsName = "Settings.json") : B
     /// Cached threshold to avoid repeated Settings access in hot paths.
     /// Updated whenever settings are reloaded.
     /// </summary>
-    public static long CachedThreshold = 50;
+    public static long CachedThreshold = 10;
 
     /// <summary>
     /// Static reference to the instance so static command handlers can access SettingsContainer
@@ -31,7 +31,7 @@ public class PatchClass(BasicMod mod, string settingsName = "Settings.json") : B
         Settings = SettingsContainer.Settings;
 
         // Cache the threshold for fast access in patches
-        CachedThreshold = Settings.IgnoreBurdenBelowCharacterLevel;
+        CachedThreshold = Settings.BurdenThresholdLevel;
 
         ModManager.Log($"NoBurden started successfully!");
         ModManager.Log($"Burden disabled for characters below level {CachedThreshold}");
@@ -69,7 +69,7 @@ public class PatchClass(BasicMod mod, string settingsName = "Settings.json") : B
                 if (newSettings != null)
                 {
                     Settings = newSettings;
-                    CachedThreshold = Settings.IgnoreBurdenBelowCharacterLevel;
+                    CachedThreshold = Settings.BurdenThresholdLevel;
                 }
             }
         }
@@ -212,9 +212,9 @@ public class Settings
 {
     /// <summary>
     /// The character level at which burden will start to apply.
-    /// Players below this level ignore encumbrance mechanics.
-    /// Default: 50 (burden applies at level 50 and above)
+    /// Players at or below this level ignore encumbrance mechanics.
+    /// Default: 10 (burden applies at level 11 and above)
     /// Set to 0 for retail behavior (burden applies at all levels)
     /// </summary>
-    public long IgnoreBurdenBelowCharacterLevel { get; set; } = 50;
+    public long BurdenThresholdLevel { get; set; } = 10;
 }
