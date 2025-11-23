@@ -1,0 +1,10 @@
+{
+  "Name": "NoBurden",
+  "Author": "",
+  "Description": "NoBurden mod",
+  "Version": "1.0",
+  "Enabled": true,
+  "HotReload": true,
+  "RegisterCommands": false,
+  "ACEVersion": "0.0"
+}
