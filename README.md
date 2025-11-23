@@ -27,11 +27,11 @@ NoBurden is a Harmony-based mod that allows new or low-level players to carry it
 
 ## Features
 
-✅ **Dynamic burden prevention** - Players at or below the threshold carry unlimited items
-✅ **Zero encumbrance value** - Burden indicator never shows for protected players
-✅ **Level-up warning** - Red warning message when player crosses the threshold
-✅ **Admin commands** - In-game and console commands to manage settings (status, reload, limit, default)
-✅ **Helper extension** - Other code can check burden status via `.IsBurdenIgnored()`
+- ✅ **Dynamic burden prevention** - Players at or below the threshold carry unlimited items
+- ✅ **Zero encumbrance value** - Burden indicator never shows for protected players
+- ✅ **Level-up warning** - Red warning message when player crosses the threshold
+- ✅ **Admin commands** - In-game and console commands to manage settings (status, reload, limit, default)
+- ✅ **Helper extension** - Other code can check burden status via `.IsBurdenIgnored()`
 
 ## Configuration
 
