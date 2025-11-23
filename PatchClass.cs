@@ -34,7 +34,7 @@ public class PatchClass(BasicMod mod, string settingsName = "Settings.json") : B
         CachedThreshold = Settings.BurdenThresholdLevel;
 
         ModManager.Log($"NoBurden started successfully!");
-        ModManager.Log($"Burden disabled for characters below level {CachedThreshold}");
+        ModManager.Log($"Burden disabled for characters level {CachedThreshold} and below");
 
         return Task.CompletedTask;
     }
@@ -150,7 +150,7 @@ public class PatchClass(BasicMod mod, string settingsName = "Settings.json") : B
     private static void HandleReloadCommand(Session session)
     {
         var oldThreshold = CachedThreshold;
-        Instance.ReloadSettings();
+        Instance?.ReloadSettings();
 
         var feedback = $"NoBurden settings reloaded. Burden threshold: {CachedThreshold}";
         if (oldThreshold != CachedThreshold)
