@@ -144,7 +144,6 @@ public class PatchClass(BasicMod mod, string settingsName = "Settings.json") : B
     {
         var message = $"NoBurden - Current burden threshold: {CachedThreshold}";
         SendMessage(session, message, ChatMessageType.CombatEnemy);
-        ModManager.Log(message);
     }
 
     private static void HandleReloadCommand(Session session)
