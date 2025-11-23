@@ -14,10 +14,8 @@ A server mod for Asheron's Call Emulator (ACE) that disables encumbrance/burden 
 - [Installation](#installation)
 - [Usage](#usage)
 - [Commands](#commands)
-- [How It Works](#how-it-works)
 - [Building](#building)
 - [Project Structure](#project-structure)
-- [Development](#development)
 - [Technical Details](#technical-details)
 - [License](#license)
 
@@ -29,10 +27,10 @@ NoBurden is a Harmony-based mod that allows new or low-level players to carry it
 
 ## Features
 
-✅ **Dynamic burden prevention** - Players below the threshold carry unlimited items
+✅ **Dynamic burden prevention** - Players at or below the threshold carry unlimited items
 ✅ **Zero encumbrance value** - Burden indicator never shows for protected players
 ✅ **Level-up warning** - Red warning message when player crosses the threshold
-✅ **Admin reload command** - Hot-reload settings without server restart
+✅ **Admin commands** - In-game and console commands to manage settings (status, reload, limit, default)
 ✅ **Helper extension** - Other code can check burden status via `.IsBurdenIgnored()`
 
 ## Configuration
@@ -261,79 +259,6 @@ NoBurden.dll                  # Compiled mod (output)
 | `GlobalUsings.cs` | Global imports for ACE, Harmony, System namespaces |
 | `Meta.json` | Metadata for server mod manager (name, version, description) |
 | `Settings.json` | Runtime configuration, auto-created if missing |
-
-## How It Works
-
-NoBurden uses four Harmony patches and one helper extension to disable burden mechanics:
-
-### 1. Encumbrance Capacity Patch
-**Method:** `Player.GetEncumbranceCapacity()`
-**Effect:** Returns effectively unlimited capacity (10,000,000) for players below threshold
-**Purpose:** Prevents the encumbered status effect from triggering
-
-### 2. Encumbrance Value Setter Patch
-**Method:** `WorldObject.EncumbranceVal` (setter)
-**Effect:** Sets burden value to 0 for protected players
-**Purpose:** Ensures the burden indicator never displays
-
-### 3. Level-Up Detection (Prefix)
-**Method:** `Player.UpdateXpAndLevel()` (Prefix)
-**Effect:** Captures player level BEFORE level-up processing
-**Purpose:** Allows detection of threshold crossing
-
-### 4. Level-Up Detection (Postfix)
-**Method:** `Player.UpdateXpAndLevel()` (Postfix)
-**Effect:** Detects if player crossed threshold and sends red warning message
-**Purpose:** Notifies player when burden protection ends
-
-### 5. Helper Extension
-**Method:** `IsBurdenIgnored()` (extension on Player)
-**Usage:** `if (player.IsBurdenIgnored()) { /* custom logic */ }`
-**Purpose:** Allows other code to check if a player is protected
-
-### Settings Caching
-
-To avoid repeated `Settings.json` reads in hot paths:
-- `CachedThreshold` static variable stores the current level
-- Updated only during `OnStartSuccess()` and when `/noburden reload` is called
-- Patches use the cached value instead of hitting the file
-
-### File Watching
-
-The framework automatically watches `Settings.json` for changes:
-- When file is edited and saved, `FileSystemWatcher` detects the change
-- Mod is automatically restarted (Stop → Start)
-- New settings loaded from disk
-- No need to manually reload (though `/noburden reload` command also works)
-
-## Development
-
-### Code Examples
-
-#### Accessing Settings
-```csharp
-// In any method
-if (PatchClass.Settings.BurdenThresholdLevel > 0)
-{
-    // Burden protection is enabled
-}
-```
-
-#### Using Helper Extension
-```csharp
-// Check if a player is protected
-if (player.IsBurdenIgnored())
-{
-    ModManager.Log($"{player.Name} is protected from burden");
-}
-```
-
-### Key Classes
-
-- **PatchClass** - Inherits from `BasicPatch<Settings>`, contains all patches
-- **Settings** - POCO class with configurable properties
-- **Harmony** - Uses version 2.3.3 for runtime method patching
-- **BasicPatch<T>** - Framework base class handling lifecycle and settings management
 
 ## Technical Details
 
