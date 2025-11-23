@@ -97,8 +97,15 @@ public class PatchClass(BasicMod mod, string settingsName = "Settings.json") : B
             return;
         }
 
-        // Default to status if no subcommand
-        var subcommand = parameters.Length > 0 ? parameters[0].ToLower() : "status";
+        // Show help and status if no parameters
+        if (parameters.Length == 0)
+        {
+            HandleHelpCommand(session);
+            HandleStatusCommand(session);
+            return;
+        }
+
+        var subcommand = parameters[0].ToLower();
 
         switch (subcommand)
         {
@@ -122,6 +129,15 @@ public class PatchClass(BasicMod mod, string settingsName = "Settings.json") : B
                 SendMessage(session, $"Unknown command: {subcommand}. Use: status, reload, limit <level>, or default", ChatMessageType.Broadcast);
                 break;
         }
+    }
+
+    private static void HandleHelpCommand(Session session)
+    {
+        SendMessage(session, "=== NoBurden Commands ===", ChatMessageType.CombatEnemy);
+        SendMessage(session, "/noburden status - Show current threshold", ChatMessageType.Broadcast);
+        SendMessage(session, "/noburden reload - Reload from Settings.json", ChatMessageType.Broadcast);
+        SendMessage(session, "/noburden limit <level> - Set threshold level", ChatMessageType.Broadcast);
+        SendMessage(session, "/noburden default - Reset to default (10)", ChatMessageType.Broadcast);
     }
 
     private static void HandleStatusCommand(Session session)
