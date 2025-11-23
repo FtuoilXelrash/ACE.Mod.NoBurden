@@ -11,13 +11,30 @@ public class PatchClass(BasicMod mod, string settingsName = "Settings.json") : B
     [ThreadStatic]
     private static long? CapturedLevelBeforeUpdate = null;
 
+    /// <summary>
+    /// Cached threshold to avoid repeated Settings access in hot paths.
+    /// Updated whenever settings are reloaded.
+    /// </summary>
+    public static long CachedThreshold = 50;
+
+    /// <summary>
+    /// Static reference to the instance so static command handlers can access SettingsContainer
+    /// </summary>
+    private static PatchClass Instance = null;
+
     public override Task OnStartSuccess()
     {
+        // Store instance reference for static command handlers
+        Instance = this;
+
         // Assign Settings from SettingsContainer to make it available throughout the class
         Settings = SettingsContainer.Settings;
 
+        // Cache the threshold for fast access in patches
+        CachedThreshold = Settings.IgnoreBurdenBelowCharacterLevel;
+
         ModManager.Log($"NoBurden started successfully!");
-        ModManager.Log($"Burden disabled for characters below level {Settings.IgnoreBurdenBelowCharacterLevel}");
+        ModManager.Log($"Burden disabled for characters below level {CachedThreshold}");
 
         return Task.CompletedTask;
     }
@@ -26,6 +43,72 @@ public class PatchClass(BasicMod mod, string settingsName = "Settings.json") : B
     {
         base.Stop();
         ModManager.Log($"NoBurden stopped!");
+    }
+
+    /// <summary>
+    /// Instance method that performs the actual settings reload.
+    /// This has access to SettingsContainer as an instance member.
+    /// </summary>
+    public void ReloadSettings()
+    {
+        SettingsContainer.LoadOrCreateAsync().Wait();
+        Settings = SettingsContainer.Settings;
+        CachedThreshold = Settings.IgnoreBurdenBelowCharacterLevel;
+    }
+
+    /// <summary>
+    /// In-game admin command to reload settings and show feedback
+    /// Usage: /nbreload (in-game only)
+    /// Only works for admin players (Player.IsAdmin == true)
+    /// </summary>
+    [CommandHandler("nbreload", AccessLevel.Admin, CommandHandlerFlag.None, 0, "Reload NoBurden settings", "")]
+    public static void HandleReloadNoBurdenSettingsIngame(Session session, params string[] parameters)
+    {
+        if (Instance == null)
+        {
+            ChatPacket.SendServerMessage(session, "NoBurden mod not properly initialized.", ChatMessageType.Broadcast);
+            return;
+        }
+
+        var oldThreshold = PatchClass.CachedThreshold;
+
+        // Reload settings from disk via instance method
+        Instance.ReloadSettings();
+
+        // Provide feedback
+        var feedback = $"NoBurden settings reloaded. Burden threshold: {CachedThreshold}";
+        if (oldThreshold != CachedThreshold)
+            feedback += $" (was {oldThreshold})";
+
+        ChatPacket.SendServerMessage(session, feedback, ChatMessageType.CombatEnemy);
+        ModManager.Log(feedback);
+    }
+
+    /// <summary>
+    /// Console-only admin command to reload settings
+    /// Usage: nbreload (console only, no / prefix)
+    /// </summary>
+    [CommandHandler("nbreload", AccessLevel.Admin, CommandHandlerFlag.ConsoleInvoke, 0, "Reload NoBurden settings (console)", "")]
+    public static void HandleReloadNoBurdenSettingsConsole(Session session, params string[] parameters)
+    {
+        if (Instance == null)
+        {
+            Console.WriteLine("NoBurden mod not properly initialized.");
+            return;
+        }
+
+        var oldThreshold = PatchClass.CachedThreshold;
+
+        // Reload settings from disk via instance method
+        Instance.ReloadSettings();
+
+        // Provide feedback
+        var feedback = $"NoBurden settings reloaded. Burden threshold: {CachedThreshold}";
+        if (oldThreshold != CachedThreshold)
+            feedback += $" (was {oldThreshold})";
+
+        Console.WriteLine(feedback);
+        ModManager.Log(feedback);
     }
 
     // ===== PATCH 1: Override GetEncumbranceCapacity =====
@@ -38,9 +121,7 @@ public class PatchClass(BasicMod mod, string settingsName = "Settings.json") : B
     [HarmonyPostfix]
     public static void Patch_GetEncumbranceCapacity(Player __instance, ref int __result)
     {
-        var threshold = PatchClass.Settings.IgnoreBurdenBelowCharacterLevel;
-
-        if (__instance.Level < threshold)
+        if (__instance.Level < CachedThreshold)
         {
             __result = 10000000;  // Return effectively unlimited capacity
         }
@@ -57,84 +138,43 @@ public class PatchClass(BasicMod mod, string settingsName = "Settings.json") : B
     {
         if (value.HasValue && __instance is Player player)
         {
-            var threshold = PatchClass.Settings.IgnoreBurdenBelowCharacterLevel;
-
-            if (player.Level < threshold)
+            if (player.Level < CachedThreshold)
             {
                 value = 0;  // Zero out burden for low-level players
             }
         }
     }
 
-    // ===== PATCH 3: Detect Level-Up and Send Warning =====
+    // ===== PATCH 3: UpdateXpAndLevel Prefix - Capture Level Before =====
     /// <summary>
-    /// Patch Player.PlayerEnterWorld() to initialize level cache and detect level changes.
-    /// We use PlayerEnterWorld as a hook to track when players log in.
+    /// Prefix for UpdateXpAndLevel() captures player level BEFORE the method runs.
+    /// Stores in thread-local variable for use in Postfix.
     /// </summary>
-    [HarmonyPatch(typeof(Player), nameof(Player.PlayerEnterWorld))]
-    [HarmonyPostfix]
-    public static void Patch_PlayerEnterWorld(Player __instance)
+    [HarmonyPatch(typeof(Player), "UpdateXpAndLevel")]
+    [HarmonyPrefix]
+    public static void Patch_UpdateXpAndLevel_Prefix(Player __instance)
     {
-        var threshold = PatchClass.Settings.IgnoreBurdenBelowCharacterLevel;
-        var currentLevel = __instance.Level ?? 1;
-
-        // Check if player already crossed threshold before this login
-        if (PlayerLevelCache.ContainsKey(__instance.Guid))
-        {
-            var cachedLevel = PlayerLevelCache[__instance.Guid];
-            if (cachedLevel < threshold && currentLevel >= threshold)
-            {
-                __instance.Session?.Network.EnqueueSend(new GameMessageSystemChat(
-                    $"WARNING: Your level has reached {currentLevel} you now suffer from the effects of burden!\n" +
-                    $"(This effect may not be applied until the next time you log in.)",
-                    ChatMessageType.CombatEnemy
-                ));
-            }
-            // Remove from cache if now at or above threshold (no longer need to track them)
-            if (currentLevel >= threshold)
-                PlayerLevelCache.Remove(__instance.Guid);
-        }
-        else if (currentLevel < threshold)
-        {
-            // Only cache players below threshold
-            PlayerLevelCache[__instance.Guid] = currentLevel;
-        }
+        // Capture the level before UpdateXpAndLevel runs
+        CapturedLevelBeforeUpdate = __instance.Level ?? 1;
     }
 
-    // ===== PATCH 4: Level Property Setter Detection =====
     // ===== PATCH 4: UpdateXpAndLevel Postfix - Detect Level-Up =====
     /// <summary>
-    /// Patch the private UpdateXpAndLevel() method as a Postfix.
-    /// After CheckForLevelup() runs inside UpdateXpAndLevel, check if level changed.
-    /// This is where we can detect level-ups and send the burden warning immediately.
+    /// Postfix for UpdateXpAndLevel() detects if level changed and warns if threshold crossed.
+    /// Uses captured level from Prefix - no persistent cache needed.
     /// </summary>
     [HarmonyPatch(typeof(Player), "UpdateXpAndLevel")]
     [HarmonyPostfix]
-    public static void Patch_UpdateXpAndLevel(Player __instance)
+    public static void Patch_UpdateXpAndLevel_Postfix(Player __instance)
     {
-        var threshold = PatchClass.Settings.IgnoreBurdenBelowCharacterLevel;
+        var startingLevel = CapturedLevelBeforeUpdate ?? (__instance.Level ?? 1);
         var currentLevel = __instance.Level ?? 1;
 
-        // Only track players below threshold
-        if (currentLevel >= threshold)
-        {
-            // Remove from cache if leveled past threshold
-            PlayerLevelCache.Remove(__instance.Guid);
-            return;
-        }
-
-        // Get cached level (level before UpdateXpAndLevel was called)
-        if (!PlayerLevelCache.ContainsKey(__instance.Guid))
-        {
-            // First time seeing this below-threshold player - just cache them
-            PlayerLevelCache[__instance.Guid] = currentLevel;
-            return;
-        }
-
-        var startingLevel = PlayerLevelCache[__instance.Guid];
+        // Clear the thread-local after use
+        CapturedLevelBeforeUpdate = null;
 
         // Check if we crossed the burden threshold (exact same logic as custom server code)
-        if (startingLevel < threshold && currentLevel >= threshold)
+        if (startingLevel < CachedThreshold && currentLevel >= CachedThreshold)
         {
             // Send warning message immediately (just like in custom server code)
             __instance.Session?.Network.EnqueueSend(new GameMessageSystemChat(
@@ -142,28 +182,6 @@ public class PatchClass(BasicMod mod, string settingsName = "Settings.json") : B
                 $"(This effect may not be applied until the next time you log in.)",
                 ChatMessageType.CombatEnemy
             ));
-            // Remove from cache since they're now at/above threshold
-            PlayerLevelCache.Remove(__instance.Guid);
-        }
-        else
-        {
-            // Update cache to current level for next call (only if still below threshold)
-            PlayerLevelCache[__instance.Guid] = currentLevel;
-        }
-    }
-
-    // ===== PATCH 5: Cleanup player cache on logout =====
-    /// <summary>
-    /// Patch Player.LogOut() to clean up the level cache for this player.
-    /// </summary>
-    [HarmonyPatch(typeof(Player), nameof(Player.LogOut))]
-    [HarmonyPrefix]
-    public static void Patch_LogOut(Player __instance)
-    {
-        // Remove this player from the level cache to prevent memory leaks
-        if (PlayerLevelCache.ContainsKey(__instance.Guid))
-        {
-            PlayerLevelCache.Remove(__instance.Guid);
         }
     }
 
@@ -180,8 +198,7 @@ public static class NoBurdenHelpers
     /// </summary>
     public static bool IsBurdenIgnored(this Player player)
     {
-        var threshold = PatchClass.Settings?.IgnoreBurdenBelowCharacterLevel ?? 50;
-        return player.Level < threshold;
+        return player.Level < PatchClass.CachedThreshold;
     }
 }
 
