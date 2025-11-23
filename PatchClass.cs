@@ -20,7 +20,7 @@ public class PatchClass(BasicMod mod, string settingsName = "Settings.json") : B
     /// <summary>
     /// Static reference to the instance so static command handlers can access SettingsContainer
     /// </summary>
-    private static PatchClass Instance = null;
+    private static PatchClass? Instance = null;
 
     public override Task OnStartSuccess()
     {
