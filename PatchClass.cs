@@ -80,41 +80,160 @@ public class PatchClass(BasicMod mod, string settingsName = "Settings.json") : B
     }
 
     /// <summary>
-    /// Admin command to reload settings
-    /// Usage: /nbreload (in-game) or nbreload (console - no prefix)
+    /// Admin command for NoBurden mod management
+    /// Usage: /noburden [status|reload|limit|default] [args]
+    /// Examples:
+    ///   /noburden status - Show current threshold
+    ///   /noburden reload - Reload from Settings.json
+    ///   /noburden limit 15 - Set threshold to 15
+    ///   /noburden default - Reset to default (10)
     /// </summary>
-    [CommandHandler("nbreload", AccessLevel.Admin, CommandHandlerFlag.None, 0, "Reload NoBurden settings", "")]
-    public static void HandleReloadNoBurdenSettings(Session session, params string[] parameters)
+    [CommandHandler("noburden", AccessLevel.Admin, CommandHandlerFlag.None, -1, "Manage NoBurden settings", "status|reload|limit <level>|default")]
+    public static void HandleNoBurdenCommand(Session session, params string[] parameters)
     {
         if (Instance == null)
         {
-            if (session?.Player != null)
-                ChatPacket.SendServerMessage(session, "NoBurden mod not properly initialized.", ChatMessageType.Broadcast);
-            else
-                Console.WriteLine("NoBurden mod not properly initialized.");
+            SendMessage(session, "NoBurden mod not properly initialized.", ChatMessageType.Broadcast);
             return;
         }
 
-        var oldThreshold = PatchClass.CachedThreshold;
+        // Default to status if no subcommand
+        var subcommand = parameters.Length > 0 ? parameters[0].ToLower() : "status";
 
-        // Reload settings from disk via instance method
+        switch (subcommand)
+        {
+            case "status":
+                HandleStatusCommand(session);
+                break;
+
+            case "reload":
+                HandleReloadCommand(session);
+                break;
+
+            case "limit":
+                HandleLimitCommand(session, parameters);
+                break;
+
+            case "default":
+                HandleDefaultCommand(session);
+                break;
+
+            default:
+                SendMessage(session, $"Unknown command: {subcommand}. Use: status, reload, limit <level>, or default", ChatMessageType.Broadcast);
+                break;
+        }
+    }
+
+    private static void HandleStatusCommand(Session session)
+    {
+        var message = $"NoBurden - Current burden threshold: {CachedThreshold}";
+        SendMessage(session, message, ChatMessageType.CombatEnemy);
+        ModManager.Log(message);
+    }
+
+    private static void HandleReloadCommand(Session session)
+    {
+        var oldThreshold = CachedThreshold;
         Instance.ReloadSettings();
 
-        // Provide feedback
         var feedback = $"NoBurden settings reloaded. Burden threshold: {CachedThreshold}";
         if (oldThreshold != CachedThreshold)
             feedback += $" (was {oldThreshold})";
 
-        // Send feedback to appropriate channel (in-game vs console)
-        if (session?.Player != null)
-        {
-            ChatPacket.SendServerMessage(session, feedback, ChatMessageType.CombatEnemy);
-        }
-        else
-        {
-            Console.WriteLine(feedback);
-        }
+        SendMessage(session, feedback, ChatMessageType.CombatEnemy);
         ModManager.Log(feedback);
+    }
+
+    private static void HandleLimitCommand(Session session, params string[] parameters)
+    {
+        if (parameters.Length < 2)
+        {
+            SendMessage(session, "Usage: noburden limit <level>", ChatMessageType.Broadcast);
+            return;
+        }
+
+        if (!long.TryParse(parameters[1], out var newLevel))
+        {
+            SendMessage(session, $"Invalid level: {parameters[1]}. Must be a number.", ChatMessageType.Broadcast);
+            return;
+        }
+
+        if (newLevel < 0)
+        {
+            SendMessage(session, "Level cannot be negative.", ChatMessageType.Broadcast);
+            return;
+        }
+
+        var oldThreshold = CachedThreshold;
+
+        // Update settings object and cache
+        PatchClass.Settings.BurdenThresholdLevel = newLevel;
+        CachedThreshold = newLevel;
+
+        // Save to Settings.json
+        try
+        {
+            var settingsPath = Path.Combine(Mod.Instance.ModPath, "Settings.json");
+            using (var fileStream = new FileStream(settingsPath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
+            {
+                JsonSerializer.SerializeAsync(fileStream, PatchClass.Settings, new JsonSerializerOptions { WriteIndented = true }).Wait();
+            }
+
+            var feedback = $"NoBurden burden threshold updated: {newLevel}";
+            if (oldThreshold != newLevel)
+                feedback += $" (was {oldThreshold})";
+
+            SendMessage(session, feedback, ChatMessageType.CombatEnemy);
+            ModManager.Log(feedback);
+        }
+        catch (Exception ex)
+        {
+            PatchClass.Settings.BurdenThresholdLevel = oldThreshold;
+            CachedThreshold = oldThreshold;
+            SendMessage(session, $"Error saving settings: {ex.Message}", ChatMessageType.Broadcast);
+            ModManager.Log($"Error saving NoBurden settings: {ex.Message}");
+        }
+    }
+
+    private static void HandleDefaultCommand(Session session)
+    {
+        var oldThreshold = CachedThreshold;
+        const long defaultLevel = 10;
+
+        PatchClass.Settings.BurdenThresholdLevel = defaultLevel;
+        CachedThreshold = defaultLevel;
+
+        // Save to Settings.json
+        try
+        {
+            var settingsPath = Path.Combine(Mod.Instance.ModPath, "Settings.json");
+            using (var fileStream = new FileStream(settingsPath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
+            {
+                JsonSerializer.SerializeAsync(fileStream, PatchClass.Settings, new JsonSerializerOptions { WriteIndented = true }).Wait();
+            }
+
+            var feedback = $"NoBurden threshold reset to default: {defaultLevel}";
+            if (oldThreshold != defaultLevel)
+                feedback += $" (was {oldThreshold})";
+
+            SendMessage(session, feedback, ChatMessageType.CombatEnemy);
+            ModManager.Log(feedback);
+        }
+        catch (Exception ex)
+        {
+            PatchClass.Settings.BurdenThresholdLevel = oldThreshold;
+            CachedThreshold = oldThreshold;
+            SendMessage(session, $"Error saving settings: {ex.Message}", ChatMessageType.Broadcast);
+            ModManager.Log($"Error resetting NoBurden settings: {ex.Message}");
+        }
+    }
+
+    private static void SendMessage(Session session, string message, ChatMessageType messageType)
+    {
+        if (session?.Player != null)
+            ChatPacket.SendServerMessage(session, message, messageType);
+        else
+            Console.WriteLine(message);
     }
 
     // ===== PATCH 1: Override GetEncumbranceCapacity =====
