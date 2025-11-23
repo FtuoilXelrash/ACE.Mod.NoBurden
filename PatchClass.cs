@@ -47,14 +47,37 @@ public class PatchClass(BasicMod mod, string settingsName = "Settings.json") : B
 
     /// <summary>
     /// Instance method that performs the actual settings reload.
-    /// This has access to SettingsContainer as an instance member.
+    /// Reads Settings.json directly with proper file sharing to avoid locks.
     /// </summary>
     public void ReloadSettings()
     {
-        // Reload settings from SettingsContainer (handles file I/O internally)
-        SettingsContainer.LoadOrCreateAsync().GetAwaiter().GetResult();
-        Settings = SettingsContainer.Settings;
-        CachedThreshold = Settings.IgnoreBurdenBelowCharacterLevel;
+        try
+        {
+            // Get the settings file path from SettingsContainer
+            var settingsDir = AppContext.BaseDirectory + "Mods\\NoBurden\\";
+            var settingsFile = Path.Combine(settingsDir, "Settings.json");
+
+            if (File.Exists(settingsFile))
+            {
+                // Read with FileShare.Read to allow other processes to access it
+                using (var fileStream = new FileStream(settingsFile, FileMode.Open, FileAccess.Read, FileShare.Read))
+                using (var reader = new StreamReader(fileStream))
+                {
+                    var json = reader.ReadToEnd();
+                    var newSettings = JsonSerializer.Deserialize<Settings>(json);
+                    if (newSettings != null)
+                    {
+                        Settings = newSettings;
+                    }
+                }
+            }
+
+            CachedThreshold = Settings.IgnoreBurdenBelowCharacterLevel;
+        }
+        catch (Exception ex)
+        {
+            ModManager.Log($"Error reloading NoBurden settings: {ex.Message}");
+        }
     }
 
     /// <summary>
