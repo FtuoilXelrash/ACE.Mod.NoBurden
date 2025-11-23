@@ -51,22 +51,25 @@ public class PatchClass(BasicMod mod, string settingsName = "Settings.json") : B
     /// </summary>
     public void ReloadSettings()
     {
-        SettingsContainer.LoadOrCreateAsync().Wait();
+        // Reload settings from SettingsContainer (handles file I/O internally)
+        SettingsContainer.LoadOrCreateAsync().GetAwaiter().GetResult();
         Settings = SettingsContainer.Settings;
         CachedThreshold = Settings.IgnoreBurdenBelowCharacterLevel;
     }
 
     /// <summary>
-    /// In-game admin command to reload settings and show feedback
-    /// Usage: /nbreload (in-game only)
-    /// Only works for admin players (Player.IsAdmin == true)
+    /// Admin command to reload settings
+    /// Usage: /nbreload (in-game) or nbreload (console - no prefix)
     /// </summary>
     [CommandHandler("nbreload", AccessLevel.Admin, CommandHandlerFlag.None, 0, "Reload NoBurden settings", "")]
-    public static void HandleReloadNoBurdenSettingsIngame(Session session, params string[] parameters)
+    public static void HandleReloadNoBurdenSettings(Session session, params string[] parameters)
     {
         if (Instance == null)
         {
-            ChatPacket.SendServerMessage(session, "NoBurden mod not properly initialized.", ChatMessageType.Broadcast);
+            if (session?.Player != null)
+                ChatPacket.SendServerMessage(session, "NoBurden mod not properly initialized.", ChatMessageType.Broadcast);
+            else
+                Console.WriteLine("NoBurden mod not properly initialized.");
             return;
         }
 
@@ -80,34 +83,15 @@ public class PatchClass(BasicMod mod, string settingsName = "Settings.json") : B
         if (oldThreshold != CachedThreshold)
             feedback += $" (was {oldThreshold})";
 
-        ChatPacket.SendServerMessage(session, feedback, ChatMessageType.CombatEnemy);
-        ModManager.Log(feedback);
-    }
-
-    /// <summary>
-    /// Console-only admin command to reload settings
-    /// Usage: nbreload (console only, no / prefix)
-    /// </summary>
-    [CommandHandler("nbreload", AccessLevel.Admin, CommandHandlerFlag.ConsoleInvoke, 0, "Reload NoBurden settings (console)", "")]
-    public static void HandleReloadNoBurdenSettingsConsole(Session session, params string[] parameters)
-    {
-        if (Instance == null)
+        // Send feedback to appropriate channel (in-game vs console)
+        if (session?.Player != null)
         {
-            Console.WriteLine("NoBurden mod not properly initialized.");
-            return;
+            ChatPacket.SendServerMessage(session, feedback, ChatMessageType.CombatEnemy);
         }
-
-        var oldThreshold = PatchClass.CachedThreshold;
-
-        // Reload settings from disk via instance method
-        Instance.ReloadSettings();
-
-        // Provide feedback
-        var feedback = $"NoBurden settings reloaded. Burden threshold: {CachedThreshold}";
-        if (oldThreshold != CachedThreshold)
-            feedback += $" (was {oldThreshold})";
-
-        Console.WriteLine(feedback);
+        else
+        {
+            Console.WriteLine(feedback);
+        }
         ModManager.Log(feedback);
     }
 
