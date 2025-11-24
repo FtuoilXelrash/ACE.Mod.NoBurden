@@ -2,7 +2,7 @@
   "Name": "NoBurden",
   "Author": "",
   "Description": "NoBurden mod",
-  "Version": "1.0",
+  "Version": "1.0.0",
   "Enabled": true,
   "HotReload": true,
   "RegisterCommands": true,
