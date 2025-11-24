@@ -1,6 +1,6 @@
 # NoBurden
 
-![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
+![License](https://img.shields.io/badge/license-MIT-blue)
 ![.NET](https://img.shields.io/badge/.NET-8.0-512BD4)
 ![ACE Version](https://img.shields.io/badge/ACE-compatible-green)
 
@@ -277,16 +277,15 @@ NoBurden.dll                  # Compiled mod (output)
 
 ## License
 
-This project is licensed under the **GNU Affero General Public License v3.0** (AGPL-3.0).
+This project is licensed under the **MIT License**.
 
-See the [LICENSE](LICENSE) file for full details, or visit https://www.gnu.org/licenses/agpl-3.0.html
+See the [LICENSE](LICENSE) file for full details, or visit https://opensource.org/licenses/MIT
 
 ### Summary
 
 - ✅ You can use, modify, and distribute this mod
-- ✅ Source code must be made available
-- ✅ Same license must be applied to derivatives
-- ⚠️ Network use requires source code availability (AGPL clause)
+- ✅ No restrictions on commercial use
+- ✅ No warranty provided (use at your own risk)
 
 ## Contributing
 
